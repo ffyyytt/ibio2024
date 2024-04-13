@@ -39,7 +39,7 @@ AUTO = tf.data.experimental.AUTOTUNE
 config = {
     "seed": 1213,
 
-    "lr": 2e-4,
+    "lr": 1e-7,
     "epochs": 5,
     "batch_size": 16 * strategy.num_replicas_in_sync,
 
@@ -227,7 +227,7 @@ class SaveModel(tf.keras.callbacks.Callback):
         self.path = path
 
     def on_epoch_end(self, epoch, logs={}):
-        self.model.save(self.path + "model.h5")
+        self.model.save(self.path + "model.keras")
 
 with strategy.scope():
     model = model_factory(backbones = config["backbones"],
