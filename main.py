@@ -48,7 +48,7 @@ config = {
 
     "data_paths": ['gs://kds-e3f80cdf7e780a3dbe79ea338358e620bc65c5a01c36bb5a0811acf5', 'gs://kds-f5e857da02f49a79e947b7eb0e85ffd3ee7622b75bae7b309f907df0', 'gs://kds-f89ea4d15874e276588a9a144d9b743c46c99f0f898f2d410661f3f7', 'gs://kds-34a27c33c6dd72f07d7c61929e3ba7a641bc8aeb77cac18364fc5098'],
     "save_path": "iBIO2/",
-    "backbones": ["EfficientNetV2M", "beit.BeitV2BasePatch16"]
+    "backbones": ["EfficientNetV2M"]
 }
 
 def seed_everything(seed):
@@ -218,8 +218,6 @@ for gcs_path in config["data_paths"]:
     DATA_FILENAMES += tf.io.gfile.glob(gcs_path + '/*BIO*.tfrec')
 
 TRAINING_FILENAMES, VALIDATION_FILENAMES = train_test_split(DATA_FILENAMES, test_size=0.05, random_state = config["seed"])
-print(TRAINING_FILENAMES)
-print(VALIDATION_FILENAMES)
 
 train_dataset = get_train_dataset(TRAINING_FILENAMES)
 valid_dataset = get_valid_dataset(VALIDATION_FILENAMES)
