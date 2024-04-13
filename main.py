@@ -48,7 +48,7 @@ config = {
 
     "data_paths": ['gs://kds-e3f80cdf7e780a3dbe79ea338358e620bc65c5a01c36bb5a0811acf5', 'gs://kds-f5e857da02f49a79e947b7eb0e85ffd3ee7622b75bae7b309f907df0', 'gs://kds-f89ea4d15874e276588a9a144d9b743c46c99f0f898f2d410661f3f7', 'gs://kds-34a27c33c6dd72f07d7c61929e3ba7a641bc8aeb77cac18364fc5098'],
     "save_path": "iBIO2/",
-    "backbones": ["EfficientNetV2M"]
+    "backbones": ["EfficientNetV2M", "EfficientNetV2S"]
 }
 
 def seed_everything(seed):
