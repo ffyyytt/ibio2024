@@ -10,6 +10,8 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 
 from tqdm.notebook import *
+from sklearn.neighbors import *
+from sklearn.decomposition import *
 from sklearn.model_selection import *
 
 try:
@@ -52,6 +54,7 @@ config = {
 }
 
 def seed_everything(seed):
+    random.seed(seed)
     np.random.seed(seed)
     tf.random.set_seed(seed)
 
@@ -59,18 +62,6 @@ seed_everything(config["seed"])
 
 def intToHash(x):
     return list(map(int, [i for i in bin(x)[3:]]))
-
-def genHash():
-    s = set()
-    features = np.zeros([1000, 48])
-    for i in range(1000):
-        features[i] = intToHash(farmhash.FarmHash64(str(i) + "seed" + str(config["seed"])))[:48]
-        if str(features[i]) in s:
-            print("BUG")
-        s.add(str(features[i]))
-    return features
-
-features = genHash()
 
 def train_transform(image, label):
     image = tf.expand_dims(image, axis=0)
@@ -291,6 +282,7 @@ for gcs_path in config["data_paths"]:
 
 TRAINING_FILENAMES, VALIDATION_FILENAMES = train_test_split(DATA_FILENAMES, test_size=0.02, random_state = config["seed"])
 
+sample_dataset = get_test_dataset(random.choices(DATA_FILENAMES, k = 1))
 train_dataset = get_train_dataset(TRAINING_FILENAMES)
 valid_dataset = get_valid_dataset(VALIDATION_FILENAMES)
 test_G_dataset = get_test_dataset(sorted(TEST_G_FILENAMES))
@@ -307,9 +299,23 @@ with strategy.scope():
                              tf.keras.metrics.TopKCategoricalAccuracy(k = 10, name = "ACC@10"),
                              tf.keras.metrics.TopKCategoricalAccuracy(k = 50, name = "ACC@50"),
                              ])
-    model.layers[-2].set_weights([features])
     savemodel = SaveModel(path = config['save_path'])
     evaluation = Evaluation(test_G_dataset, test_Q_dataset)
+
+feature_extractor = tf.keras.models.Model(inputs = model.inputs,
+                                          outputs = [model.get_layer('hash').output, model.inputs[1]])
+
+features, labels = feature_extractor.predict(sample_dataset)
+pca = PCA(n_components=48, random_state=config["seed"])
+features_pca = pca.fit_transform(features)
+base = features_pca.mean(axis = 0)
+
+features_pca_label = []
+for i in range(1000):
+    features_pca_label.append(np.mean(features_pca[labels == i], axis = 0))
+features_pca_label = np.array(features_pca_label)
+hash = (features_pca_label > base).astype(int)
+model.layers[-2].set_weights([hash])
 
 H = model.fit(train_dataset, verbose = 1,
               validation_data = valid_dataset,
