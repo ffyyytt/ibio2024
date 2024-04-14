@@ -241,7 +241,6 @@ class Evaluation(tf.keras.callbacks.Callback):
         self.q_data = q_data
 
     def bitdigest(self, digest):
-        print(digest)
         return ["".join(map(lambda v: str(int(v)), x)) for x in digest.tolist()]
 
     def to_id(self, ids):
