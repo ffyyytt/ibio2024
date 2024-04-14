@@ -39,16 +39,16 @@ AUTO = tf.data.experimental.AUTOTUNE
 config = {
     "seed": 1213,
 
-    "lr": 1e-7,
-    "epochs": 5,
+    "lr": 1e-5,
+    "epochs": 10,
     "batch_size": 16 * strategy.num_replicas_in_sync,
 
     "n_classes": 1000,
     "image_size": [224, 224, 3],
 
-    "data_paths": ['gs://kds-e3f80cdf7e780a3dbe79ea338358e620bc65c5a01c36bb5a0811acf5', 'gs://kds-f5e857da02f49a79e947b7eb0e85ffd3ee7622b75bae7b309f907df0', 'gs://kds-f89ea4d15874e276588a9a144d9b743c46c99f0f898f2d410661f3f7', 'gs://kds-34a27c33c6dd72f07d7c61929e3ba7a641bc8aeb77cac18364fc5098'],
-    "save_path": "iBIO2/",
-    "backbones": ["EfficientNetV2M", "EfficientNetV2S"]
+    "data_paths": ['gs://kds-01281822938aaf62ec2b3b62244c0a2be4da014e34fb50259ea6c0a5', 'gs://kds-f5e857da02f49a79e947b7eb0e85ffd3ee7622b75bae7b309f907df0', 'gs://kds-34a27c33c6dd72f07d7c61929e3ba7a641bc8aeb77cac18364fc5098', 'gs://kds-e3f80cdf7e780a3dbe79ea338358e620bc65c5a01c36bb5a0811acf5', 'gs://kds-f89ea4d15874e276588a9a144d9b743c46c99f0f898f2d410661f3f7', 'gs://kds-0eabfdaac2e8422c7cdaeda976ff631bbea9b91f245faa4915216c2c'],
+    "save_path": "./",
+    "backbones": ["EfficientNetV2M", "beit.BeitV2BasePatch16"]
 }
 
 def seed_everything(seed):
@@ -128,16 +128,41 @@ def get_train_dataset(filenames):
 
 def get_valid_dataset(filenames):
     dataset = load_dataset(filenames, ordered = True)
-    
+
     dataset = dataset.map(onehot, num_parallel_calls = AUTO)
+    dataset = dataset.map(margin_format, num_parallel_calls = AUTO)
+
+    dataset = dataset.batch(config["batch_size"])
+    dataset = dataset.prefetch(AUTO)
+    return dataset
+
+def get_test_dataset(filenames):
+    dataset = load_dataset(filenames, ordered = True)
+
     dataset = dataset.map(margin_format, num_parallel_calls = AUTO)
 
     dataset = dataset.batch(config["batch_size"])
     dataset = dataset.prefetch(AUTO) 
     return dataset
 
-class Margin(tf.keras.layers.Layer):   
-    def __init__(self, num_classes, margin = 0.5, scale=32, **kwargs):
+class Hash(tf.keras.layers.Layer):
+    def __init__(self, scale=50, **kwargs):
+        super().__init__(**kwargs)
+        self.scale = scale
+    def call(self, inputs, training):
+        if training:
+            return tf.math.sigmoid(self.scale*tf.nn.l2_normalize(inputs, axis = 1))
+        else:
+            return tf.math.round(tf.math.sigmoid(self.scale*tf.nn.l2_normalize(inputs, axis = 1)))
+    def get_config(self):
+        config = super().get_config().copy()
+        config.update({
+            'scale': self.scale,
+        })
+        return config
+
+class Margin(tf.keras.layers.Layer):
+    def __init__(self, num_classes, margin = 2.0, scale=32, **kwargs):
         super().__init__(**kwargs)
         self.scale = scale
         self.margin = margin
@@ -146,19 +171,16 @@ class Margin(tf.keras.layers.Layer):
     def build(self, input_shape):
         self.W = self.add_weight(shape=(self.num_classes, input_shape[0][-1]), initializer='zeros', trainable=False)
 
-    def build_hash(self, x, scale = 10.0):
-        x = tf.nn.l2_normalize(x, axis = 1)
-        return tf.nn.relu(scale*x)
-
     def hamming(self, feature):
-        x = tf.clip_by_value(self.build_hash(feature, 50), 0, 1)
-        w = tf.clip_by_value(self.build_hash(self.W, 50), 0, 1)
+        # x = tf.clip_by_value(feature, 0, 1)
+        # w = tf.clip_by_value(self.W, 0, 1)
 
-        x = tf.tile(tf.expand_dims(x, 2), [1, 1, w.shape[0]])
-        w = tf.transpose(w)
+        x = tf.tile(tf.expand_dims(feature, 2), [1, 1, self.W.shape[0]])
+        w = tf.transpose(self.W)
 
+        # tf.print(tf.nn.softmax(tf.nn.l2_normalize(48-tf.reduce_sum(tf.math.abs(x - w), axis = 1), axis = 1)*self.scale, axis = 1))
         return 48-tf.reduce_sum(tf.math.abs(x - w), axis = 1)
-    
+
     def logits(self, feature, labels):
         distance = self.hamming(feature)
         mr = tf.random.normal(shape = tf.shape(distance), mean = self.margin, stddev = 0.1*self.margin)
@@ -166,7 +188,7 @@ class Margin(tf.keras.layers.Layer):
 
         mask = tf.cast(labels, dtype=distance.dtype)
         logits = mask*distance + (1-mask)*distance_add
-        return logits
+        return tf.nn.l2_normalize(logits, axis = 1)
 
     def call(self, inputs, training):
         feature, labels = inputs
@@ -174,7 +196,7 @@ class Margin(tf.keras.layers.Layer):
         if training:
             logits = self.logits(feature, labels)
         else:
-            logits = self.hamming(feature)
+            logits = tf.nn.l2_normalize(self.hamming(feature), axis = 1)
         return logits*self.scale
 
     def get_config(self):
@@ -203,24 +225,54 @@ def model_factory(backbones, n_classes):
     label = tf.keras.layers.Input(shape = (), name = 'label', dtype = tf.int64)
 
     features = [get_backbone(backbone, image) for backbone in backbones]
-    headModel = tf.keras.layers.Concatenate()(features)
-    headModel = tf.keras.layers.Dense(48, activation = "linear")(headModel)
-    
-    margin = Margin(num_classes = n_classes)([headModel, label])
-    output = tf.keras.layers.Softmax(dtype=tf.float32)(margin)
-    
+    headModel = tf.keras.layers.Concatenate(name = "concat")(features)
+    headModel = tf.keras.layers.Dense(48, activation = "linear", name = "feature")(headModel)
+    headModel = Hash(name = "hash")(headModel)
+
+    margin = Margin(num_classes = n_classes, name = "margin")([headModel, label])
+    output = tf.keras.layers.Softmax(dtype=tf.float32, name = "output")(margin)
+
     model = tf.keras.models.Model(inputs = [image, label], outputs = [output])
     return model
 
-DATA_FILENAMES = []
+class Evaluation(tf.keras.callbacks.Callback):
+    def __init__(self, g_data, q_data):
+        self.g_data = g_data
+        self.q_data = q_data
 
-for gcs_path in config["data_paths"]:
-    DATA_FILENAMES += tf.io.gfile.glob(gcs_path + '/*BIO*.tfrec')
+    def bitdigest(self, digest):
+        print(digest)
+        return ["".join(map(lambda v: str(int(v)), x)) for x in digest.tolist()]
 
-TRAINING_FILENAMES, VALIDATION_FILENAMES = train_test_split(DATA_FILENAMES, test_size=0.05, random_state = config["seed"])
+    def to_id(self, ids):
+        return [str(x) + ".jpg" for x in ids]
 
-train_dataset = get_train_dataset(TRAINING_FILENAMES)
-valid_dataset = get_valid_dataset(VALIDATION_FILENAMES)
+    def process_gallery(self, model, epoch, steps = None):
+        feature, g_id = model.predict(self.g_data, verbose = 1, steps = steps)
+
+        df = pd.DataFrame()
+        df["image_id"] = self.to_id(g_id)
+        df["hashcode"] = self.bitdigest(feature)
+        df.to_csv(f"{config['save_path']}G_{epoch}.csv", index = False)
+
+    def process_query(self, model, epoch, steps = None):
+        feature, q_id = model.predict(self.q_data, verbose = 1, steps = steps) 
+
+        df = pd.DataFrame()
+        df["image_id"] = self.to_id(q_id)
+        df["hashcode"] = self.bitdigest(feature)
+        df.to_csv(f"{config['save_path']}Q_{epoch}.csv", index = False)
+
+    def gen_sub(self, epoch):
+        return os.Popen(f"python3 generate_submit_csv.py --gallery {config['save_path']}G_{epoch}.csv --query {config['save_path']}Q_{epoch}.csv --submit {config['save_path']}S_{epoch}.csv").read()
+
+    def on_epoch_end(self, epoch, logs={}):
+        model = tf.keras.models.Model(inputs = self.model.inputs, 
+                                        outputs = [self.model.get_layer('hash').output, self.model.inputs[1]])
+        
+        self.process_query(model, epoch)
+        self.process_gallery(model, epoch)
+        self.gen_sub(epoch)
 
 class SaveModel(tf.keras.callbacks.Callback):
     def __init__(self, path):
@@ -229,22 +281,39 @@ class SaveModel(tf.keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs={}):
         self.model.save(self.path + "model.keras")
 
+DATA_FILENAMES = []
+TEST_G_FILENAMES = []
+TEST_Q_FILENAMES = []
+
+for gcs_path in config["data_paths"]:
+    DATA_FILENAMES += tf.io.gfile.glob(gcs_path + '/*BIO*.tfrec')
+    TEST_G_FILENAMES += tf.io.gfile.glob(gcs_path + '/*Test_G*.tfrec')
+    TEST_Q_FILENAMES += tf.io.gfile.glob(gcs_path + '/*Test_Q*.tfrec')
+
+TRAINING_FILENAMES, VALIDATION_FILENAMES = train_test_split(DATA_FILENAMES, test_size=0.02, random_state = config["seed"])
+
+train_dataset = get_train_dataset(TRAINING_FILENAMES)
+valid_dataset = get_valid_dataset(VALIDATION_FILENAMES)
+test_G_dataset = get_test_dataset(sorted(TEST_G_FILENAMES))
+test_Q_dataset = get_test_dataset(sorted(TEST_Q_FILENAMES))
+
 with strategy.scope():
     model = model_factory(backbones = config["backbones"],
                           n_classes = config["n_classes"])
-    
+
     optimizer = tf.keras.optimizers.Adam(learning_rate = config["lr"])
     model.compile(optimizer = optimizer,
                   loss = [tf.keras.losses.CategoricalCrossentropy()],
-                  metrics = [tf.keras.metrics.CategoricalAccuracy(name = "ACC@1"), 
-                             tf.keras.metrics.TopKCategoricalAccuracy(k = 5, name = "ACC@5"),
-                             tf.keras.metrics.TopKCategoricalAccuracy(k = 20, name = "ACC@20"),
+                  metrics = [tf.keras.metrics.CategoricalAccuracy(name = "ACC@1"),
+                             tf.keras.metrics.TopKCategoricalAccuracy(k = 10, name = "ACC@10"),
+                             tf.keras.metrics.TopKCategoricalAccuracy(k = 50, name = "ACC@50"),
                              ])
     model.layers[-2].set_weights([features])
     savemodel = SaveModel(path = config['save_path'])
+    evaluation = Evaluation(test_G_dataset, test_Q_dataset)
 
 H = model.fit(train_dataset, verbose = 1,
               validation_data = valid_dataset,
-              callbacks = [savemodel],
+              callbacks = [savemodel, evaluation],
               steps_per_epoch = 1000,
               epochs = config["epochs"])
