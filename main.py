@@ -1,4 +1,5 @@
 import os
+import glob
 import random
 import sklearn
 import farmhash
@@ -48,9 +49,9 @@ config = {
     "n_classes": 1000,
     "image_size": [224, 224, 3],
 
-    "data_paths": ['gs://kds-ec481b8974177ee637239a1924c53229627dd0f3d7d6cb4cfecca2c1', 'gs://kds-84789a11106cee6dcfe4d5bc42e1635a851eb5492c553a066b5e4c58', 'gs://kds-f89ea4d15874e276588a9a144d9b743c46c99f0f898f2d410661f3f7', 'gs://kds-e3f80cdf7e780a3dbe79ea338358e620bc65c5a01c36bb5a0811acf5', 'gs://kds-34a27c33c6dd72f07d7c61929e3ba7a641bc8aeb77cac18364fc5098', 'gs://kds-f5e857da02f49a79e947b7eb0e85ffd3ee7622b75bae7b309f907df0'],
+    "data_path": "../datasets/ibio/",
     "save_path": "./",
-    "backbones": ["EfficientNetV2M", "beit.BeitV2BasePatch16"]
+    "backbones": ["EfficientNetV2M", "beit.BeitV2BasePatch16", "davit.DaViT_S", "coatnet.CoAtNet0"]
 }
 
 def seed_everything(seed):
@@ -137,7 +138,7 @@ def get_test_dataset(filenames):
     return dataset
 
 class Hash(tf.keras.layers.Layer):
-    def __init__(self, scale=50, **kwargs):
+    def __init__(self, scale=32, **kwargs):
         super().__init__(**kwargs)
         self.scale = scale
     def call(self, inputs, training):
@@ -153,32 +154,40 @@ class Hash(tf.keras.layers.Layer):
         return config
 
 class Margin(tf.keras.layers.Layer):
-    def __init__(self, num_classes, margin = 2.0, scale=32, **kwargs):
+    def __init__(self, num_classes, margin = 0.3, scale=64, **kwargs):
         super().__init__(**kwargs)
         self.scale = scale
         self.margin = margin
         self.num_classes = num_classes
 
     def build(self, input_shape):
-        self.W = self.add_weight(shape=(self.num_classes, input_shape[0][-1]), initializer='zeros', trainable=False)
+        self.W = self.add_weight(shape=(self.num_classes, input_shape[0][-1]), initializer='glorot_uniform', trainable=True)
 
-    def hamming(self, feature):
-        # x = tf.clip_by_value(feature, 0, 1)
-        # w = tf.clip_by_value(self.W, 0, 1)
+    # def hamming(self, feature):
+    #     # x = tf.clip_by_value(feature, 0, 1)
+    #     # w = tf.clip_by_value(self.W, 0, 1)
 
-        x = tf.tile(tf.expand_dims(feature, 2), [1, 1, self.W.shape[0]])
-        w = tf.transpose(self.W)
+    #     x = tf.tile(tf.expand_dims(feature, 2), [1, 1, self.W.shape[0]])
+    #     w = tf.math.sigmoid(self.scale*tf.nn.l2_normalize(self.W, axis = 1))
+    #     w = tf.transpose(self.W)
 
-        # tf.print(tf.nn.softmax(tf.nn.l2_normalize(48-tf.reduce_sum(tf.math.abs(x - w), axis = 1), axis = 1)*self.scale, axis = 1))
-        return 48-tf.reduce_sum(tf.math.abs(x - w), axis = 1)
+    #     # tf.print(tf.nn.softmax(tf.nn.l2_normalize(48-tf.reduce_sum(tf.math.abs(x - w), axis = 1), axis = 1)*self.scale, axis = 1))
+    #     return 48-tf.reduce_sum(tf.math.abs(x - w), axis = 1)
+
+    def cosine(self, feature):
+        x = tf.nn.l2_normalize(feature, axis=1)
+        w = tf.nn.l2_normalize(tf.math.sigmoid(self.scale*tf.nn.l2_normalize(self.W, axis = 1)), axis=1)
+        cos = tf.matmul(x, tf.transpose(w))
+        return cos
 
     def logits(self, feature, labels):
-        distance = self.hamming(feature)
-        mr = tf.random.normal(shape = tf.shape(distance), mean = self.margin, stddev = 0.1*self.margin)
-        distance_add = distance + mr
+        cosine = self.cosine(feature)
+        mr = tf.random.normal(shape = tf.shape(cosine), mean = self.margin, stddev = 0.1*self.margin)
+        theta = tf.acos(tf.clip_by_value(cosine, -1, 1))
+        cosine_add = tf.math.cos(theta + mr)
 
-        mask = tf.cast(labels, dtype=distance.dtype)
-        logits = mask*distance + (1-mask)*distance_add
+        mask = tf.cast(labels, dtype=cosine.dtype)
+        logits = mask*cosine_add + (1-mask)*cosine
         return tf.nn.l2_normalize(logits, axis = 1)
 
     def call(self, inputs, training):
@@ -187,7 +196,7 @@ class Margin(tf.keras.layers.Layer):
         if training:
             logits = self.logits(feature, labels)
         else:
-            logits = tf.nn.l2_normalize(self.hamming(feature), axis = 1)
+            logits = self.cosine(feature)
         return logits*self.scale
 
     def get_config(self):
@@ -271,14 +280,9 @@ class SaveModel(tf.keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs={}):
         self.model.save(self.path + "model.keras")
 
-DATA_FILENAMES = []
-TEST_G_FILENAMES = []
-TEST_Q_FILENAMES = []
-
-for gcs_path in config["data_paths"]:
-    DATA_FILENAMES += tf.io.gfile.glob(gcs_path + '/*BIO*.tfrec')
-    TEST_G_FILENAMES += tf.io.gfile.glob(gcs_path + '/*Test_G*.tfrec')
-    TEST_Q_FILENAMES += tf.io.gfile.glob(gcs_path + '/*Test_Q*.tfrec')
+DATA_FILENAMES = glob(config["data_path"] + "iBioTrain/*.tfrec")
+TEST_Q_FILENAMES = glob(config["data_path"] + "FGVC11*Query*.tfrec")
+TEST_G_FILENAMES = glob(config["data_path"] + "FGVC11*Gallery*.tfrec")
 
 TRAINING_FILENAMES, VALIDATION_FILENAMES = train_test_split(DATA_FILENAMES, test_size=0.02, random_state = config["seed"])
 
@@ -301,21 +305,6 @@ with strategy.scope():
                              ])
     savemodel = SaveModel(path = config['save_path'])
     evaluation = Evaluation(test_G_dataset, test_Q_dataset)
-
-feature_extractor = tf.keras.models.Model(inputs = model.inputs,
-                                          outputs = [model.get_layer('hash').output, model.inputs[1]])
-
-features, labels = feature_extractor.predict(sample_dataset)
-pca = PCA(n_components=48, random_state=config["seed"])
-features_pca = pca.fit_transform(features)
-base = features_pca.mean(axis = 0)
-
-features_pca_label = []
-for i in range(1000):
-    features_pca_label.append(np.mean(features_pca[labels == i], axis = 0))
-features_pca_label = np.array(features_pca_label)
-hash = (features_pca_label > base).astype(int)
-model.layers[-2].set_weights([hash])
 
 H = model.fit(train_dataset, verbose = 1,
               validation_data = valid_dataset,
