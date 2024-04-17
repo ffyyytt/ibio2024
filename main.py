@@ -280,9 +280,9 @@ class SaveModel(tf.keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs={}):
         self.model.save(self.path + "model.keras")
 
-DATA_FILENAMES = glob(config["data_path"] + "iBioTrain/*.tfrec")
-TEST_Q_FILENAMES = glob(config["data_path"] + "FGVC11*Query*.tfrec")
-TEST_G_FILENAMES = glob(config["data_path"] + "FGVC11*Gallery*.tfrec")
+DATA_FILENAMES = glob.glob(config["data_path"] + "iBioTrain/*.tfrec")
+TEST_Q_FILENAMES = glob.glob(config["data_path"] + "FGVC11*Query*.tfrec")
+TEST_G_FILENAMES = glob.glob(config["data_path"] + "FGVC11*Gallery*.tfrec")
 
 TRAINING_FILENAMES, VALIDATION_FILENAMES = train_test_split(DATA_FILENAMES, test_size=0.02, random_state = config["seed"])
 
