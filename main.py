@@ -44,7 +44,7 @@ config = {
 
     "lr": 1e-5,
     "epochs": 10,
-    "batch_size": 16 * strategy.num_replicas_in_sync,
+    "batch_size": 8 * strategy.num_replicas_in_sync,
 
     "n_classes": 1000,
     "image_size": [224, 224, 3],
