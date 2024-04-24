@@ -44,7 +44,7 @@ config = {
 
     "lr": 1e-5,
     "epochs": 10,
-    "batch_size": 8 * strategy.num_replicas_in_sync,
+    "batch_size": 16 * strategy.num_replicas_in_sync,
 
     "n_classes": 1000,
     "image_size": [224, 224, 3],
@@ -52,7 +52,7 @@ config = {
 
     "data_paths": ['gs://kds-e8b0d5b8e7554df732ca06246dd948f7e744976ca4296eae0d9cac1f', 'gs://kds-8dc2956bd73898b8aadf8ca42ec97eeba443d4d670d1ec141c6399cd', 'gs://kds-1b23b91731c9030c64b4f626012b744adb670233c3a2ae41d83c7f52', 'gs://kds-2460e8e8b49c81a43fa134284b2ec3a71ec165c3e37697807d294ed6', 'gs://kds-842e24bb6b7c321b2ca4cbdbec128929d9b9380eba1f73050c140159', 'gs://kds-dcbf94f355c745f7bb5d51ca5f70d7e3d96d51b004ba73705b2515ed', 'gs://kds-9d88eab50167d0cebc19a36a7247df5c7bb6b6145e2bd4f86176e9e9', 'gs://kds-4de88b574eca43548876201c0a9d9078e08e80cf808e612f9fc3ffc0'],
     "save_path": "./",
-    "backbones": ["beit.BeitV2BasePatch16"] #["EfficientNetV2M", "beit.BeitV2BasePatch16", "davit.DaViT_S"]
+    "backbones": ["EfficientNetV2M", "beit.BeitV2BasePatch16", "davit.DaViT_S"]
 }
 
 def seed_everything(seed):
@@ -157,7 +157,7 @@ class Hash(tf.keras.layers.Layer):
         return config
 
 class Margin(tf.keras.layers.Layer):
-    def __init__(self, num_classes, margin = 0.3, scale=80, **kwargs):
+    def __init__(self, num_classes, margin = 0.3, scale=64, **kwargs):
         super().__init__(**kwargs)
         self.scale = scale
         self.margin = margin
