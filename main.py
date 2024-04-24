@@ -315,6 +315,9 @@ with strategy.scope():
     savemodel = SaveModel(path = config['save_path'])
     evaluation = Evaluation(test_G_dataset, test_Q_dataset)
 
+if os.path.isfile("model.keras"):
+    model.load_weights("model.keras")
+
 H = model.fit(train_dataset, verbose = 1,
               validation_data = valid_dataset,
               callbacks = [savemodel, evaluation],
