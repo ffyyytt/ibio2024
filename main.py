@@ -43,7 +43,7 @@ config = {
     "seed": 1213,
 
     "lr": 1e-5,
-    "epochs": 10,
+    "epochs": 20,
     "batch_size": 16 * strategy.num_replicas_in_sync,
 
     "n_classes": 1000,
