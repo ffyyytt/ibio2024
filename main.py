@@ -48,7 +48,7 @@ config = {
 
     "n_classes": 1000,
     "image_size": [224, 224, 3],
-    "hashLength": 1024,
+    "hashLength": 48,
 
     "data_paths": ['gs://kds-e8b0d5b8e7554df732ca06246dd948f7e744976ca4296eae0d9cac1f', 'gs://kds-8dc2956bd73898b8aadf8ca42ec97eeba443d4d670d1ec141c6399cd', 'gs://kds-1b23b91731c9030c64b4f626012b744adb670233c3a2ae41d83c7f52', 'gs://kds-2460e8e8b49c81a43fa134284b2ec3a71ec165c3e37697807d294ed6', 'gs://kds-842e24bb6b7c321b2ca4cbdbec128929d9b9380eba1f73050c140159', 'gs://kds-dcbf94f355c745f7bb5d51ca5f70d7e3d96d51b004ba73705b2515ed', 'gs://kds-9d88eab50167d0cebc19a36a7247df5c7bb6b6145e2bd4f86176e9e9', 'gs://kds-4de88b574eca43548876201c0a9d9078e08e80cf808e612f9fc3ffc0'],
     "save_path": "./",
@@ -290,8 +290,8 @@ TEST_Q_FILENAMES = []
 
 for gcs_path in config["data_paths"]:
     DATA_FILENAMES += tf.io.gfile.glob(gcs_path + '/*BIO*.tfrec')
-    TEST_G_FILENAMES += tf.io.gfile.glob(gcs_path + '/FGVC10*Test_G*.tfrec')
-    TEST_Q_FILENAMES += tf.io.gfile.glob(gcs_path + '/FGVC10*Test_Q*.tfrec')
+    TEST_G_FILENAMES += tf.io.gfile.glob(gcs_path + '/FGVC11*Test_G*.tfrec')
+    TEST_Q_FILENAMES += tf.io.gfile.glob(gcs_path + '/FGVC11*Test_Q*.tfrec')
 
 TRAINING_FILENAMES, VALIDATION_FILENAMES = train_test_split(DATA_FILENAMES, test_size=0.02, random_state = config["seed"])
 
