@@ -50,7 +50,7 @@ config = {
     "image_size": [224, 224, 3],
     "hashLength": 48,
 
-    "data_paths": ['gs://kds-e8b0d5b8e7554df732ca06246dd948f7e744976ca4296eae0d9cac1f', 'gs://kds-8dc2956bd73898b8aadf8ca42ec97eeba443d4d670d1ec141c6399cd', 'gs://kds-1b23b91731c9030c64b4f626012b744adb670233c3a2ae41d83c7f52', 'gs://kds-2460e8e8b49c81a43fa134284b2ec3a71ec165c3e37697807d294ed6', 'gs://kds-842e24bb6b7c321b2ca4cbdbec128929d9b9380eba1f73050c140159', 'gs://kds-dcbf94f355c745f7bb5d51ca5f70d7e3d96d51b004ba73705b2515ed', 'gs://kds-9d88eab50167d0cebc19a36a7247df5c7bb6b6145e2bd4f86176e9e9', 'gs://kds-4de88b574eca43548876201c0a9d9078e08e80cf808e612f9fc3ffc0'],
+    "data_paths": ['gs://kds-86e7d74fb89161ace084bc1489057afc1d25ec6c9dcd699abacb2793', 'gs://kds-9597c188a458b2f0d03c5640a553ae38b1bca92dc6c91edaa583f376', 'gs://kds-085d702b3ac9c1966f9f21e8dbb0b28da4aaba5966e6b11b1f07cdb4', 'gs://kds-cd641cccd45fb3886ebed8a33cf715aba3ef53a5b80cbc7475b7a215', 'gs://kds-19fc22ce41032322d7a571e6f81982227620538d7759cf6c82e0ec70', 'gs://kds-2c8477340b79b673235c71cce49dff685e88c097bd540d7787ebc10d', 'gs://kds-7949438c31edc12e733bf6b63dac2abe0a861cf069fdfa28c367b251', 'gs://kds-ef385c8bc4ca753af39368a88dea6d93d230eb28b82f512eca4b9214'],
     "save_path": "./",
     "backbones": ["EfficientNetV2M", "beit.BeitV2BasePatch16", "davit.DaViT_S"]
 }
