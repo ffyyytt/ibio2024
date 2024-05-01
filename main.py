@@ -44,7 +44,7 @@ config = {
 
     "lr": 1e-5,
     "epochs": 20,
-    "batch_size": 16 * strategy.num_replicas_in_sync,
+    "batch_size": 8 * strategy.num_replicas_in_sync,
 
     "n_classes": 1000,
     "image_size": [224, 224, 3],
@@ -321,5 +321,5 @@ if os.path.isfile("model.keras"):
 H = model.fit(train_dataset, verbose = 1,
               validation_data = valid_dataset,
               callbacks = [savemodel, evaluation],
-              steps_per_epoch = 2000,
+              steps_per_epoch = 10000,
               epochs = config["epochs"])
