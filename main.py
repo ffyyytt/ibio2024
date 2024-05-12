@@ -43,16 +43,16 @@ config = {
     "seed": 1213,
 
     "lr": 1e-5,
-    "epochs": 20,
-    "batch_size": 8 * strategy.num_replicas_in_sync,
+    "epochs": 5,
+    "batch_size": 16 * strategy.num_replicas_in_sync,
 
     "n_classes": 1000,
     "image_size": [224, 224, 3],
     "hashLength": 48,
 
-    "data_paths": ['gs://kds-1b5dd9fe16b875f388d2e7a543a140b244b7790277a28da630e83a14', 'gs://kds-db85b5e5bac887fe81d166b7c06550f2ecaa110d95a9b66c47cb4197', 'gs://kds-acbcddd3b90f580dfd4fafd69255ed010bd28a253db452df5915e894', 'gs://kds-ce197112423113b75efe0787828235d71379d11c1a5d0b6f175e0112', 'gs://kds-61659c280c4a4796313f550e048e5ed00901e04f761d14de93a52684', 'gs://kds-06c4c2825b46920e15bf4e8bbd35c1369d01e18665126a38911f9ce4', 'gs://kds-26b4770c0a699451c074121eae9e28c79153f9fac52069293ecfa4bc', 'gs://kds-f1f10543e44076f688b6b5591f3d6f8becd7686f65203742aff9fe20'],
+    "data_paths": ['gs://kds-acbcddd3b90f580dfd4fafd69255ed010bd28a253db452df5915e894', 'gs://kds-06c4c2825b46920e15bf4e8bbd35c1369d01e18665126a38911f9ce4', 'gs://kds-f1f10543e44076f688b6b5591f3d6f8becd7686f65203742aff9fe20', 'gs://kds-61659c280c4a4796313f550e048e5ed00901e04f761d14de93a52684', 'gs://kds-1b5dd9fe16b875f388d2e7a543a140b244b7790277a28da630e83a14', 'gs://kds-db85b5e5bac887fe81d166b7c06550f2ecaa110d95a9b66c47cb4197', 'gs://kds-26b4770c0a699451c074121eae9e28c79153f9fac52069293ecfa4bc', 'gs://kds-ce197112423113b75efe0787828235d71379d11c1a5d0b6f175e0112'],
     "save_path": "./",
-    "backbones": ["EfficientNetV2M", "beit.BeitV2BasePatch16", "davit.DaViT_S"]
+    "backbones": ["EfficientNetV2M", "beit.BeitV2BasePatch16"]
 }
 
 def seed_everything(seed):
@@ -315,11 +315,102 @@ with strategy.scope():
     savemodel = SaveModel(path = config['save_path'])
     evaluation = Evaluation(test_G_dataset, test_Q_dataset)
 
-if os.path.isfile("model.keras"):
-    model.load_weights("model.keras")
+H = model.fit(train_dataset, verbose = 1,
+              validation_data = valid_dataset,
+              callbacks = [savemodel, evaluation],
+              steps_per_epoch = 10000,
+              epochs = 5)
+
+class Hash(tf.keras.layers.Layer):
+    def __init__(self, scale=8, **kwargs):
+        super().__init__(**kwargs)
+        self.scale = scale
+    def call(self, inputs, training):
+        if training:
+            return tf.math.sigmoid(self.scale*tf.nn.l2_normalize(inputs, axis = 1))
+            # return tf.math.sigmoid(inputs)
+        else:
+            return tf.math.round(tf.math.sigmoid(self.scale*tf.nn.l2_normalize(inputs, axis = 1)))
+            # return tf.math.round(tf.math.sigmoid(inputs))
+    def get_config(self):
+        config = super().get_config().copy()
+        config.update({
+            'scale': self.scale,
+        })
+        return config
+    
+class Margin(tf.keras.layers.Layer):
+    def __init__(self, num_classes, margin = 0.3, scale=64, **kwargs):
+        super().__init__(**kwargs)
+        self.scale = scale
+        self.margin = margin
+        self.num_classes = num_classes
+
+    def build(self, input_shape):
+        self.W = self.add_weight(shape=(self.num_classes, input_shape[0][-1]), initializer='glorot_uniform', trainable=True)
+
+    def hamming(self, feature):
+        w = tf.math.sigmoid(8*tf.nn.l2_normalize(self.W, axis = 1))
+        x = tf.tile(tf.expand_dims(feature, 2), [1, 1, self.W.shape[0]])
+        w = tf.transpose(w)
+
+        return 48-tf.reduce_sum(tf.math.abs(x - w), axis = 1)
+
+    # def cosine(self, feature):
+    #     x = tf.nn.l2_normalize(feature, axis=1)
+    #     w = tf.nn.l2_normalize(tf.math.sigmoid(1000*tf.nn.l2_normalize(self.W, axis = 1)), axis=1)
+    #     cos = tf.matmul(x, tf.transpose(w))
+    #     return cos
+
+    # def logits(self, feature, labels):
+    #     cosine = self.cosine(feature)
+    #     mr = tf.random.normal(shape = tf.shape(cosine), mean = self.margin, stddev = 0.1*self.margin)
+    #     theta = tf.acos(tf.clip_by_value(cosine, -1, 1))
+    #     cosine_add = tf.math.cos(theta + mr)
+
+    #     mask = tf.cast(labels, dtype=cosine.dtype)
+    #     logits = mask*cosine_add + (1-mask)*cosine
+    #     return tf.nn.l2_normalize(logits, axis = 1)
+
+    def call(self, inputs, training):
+        feature, labels = inputs
+
+        # if training:
+        #     logits = self.logits(feature, labels)
+        # else:
+        #     logits = self.cosine(feature)
+        logits = self.hamming(feature)
+        return logits*self.scale
+
+    def get_config(self):
+        config = super().get_config().copy()
+        config.update({
+            'scale': self.scale,
+            'margin': self.margin,
+            'num_classes': self.num_classes,
+        })
+        return config
+
+with strategy.scope():
+    model = model_factory(backbones = config["backbones"],
+                          n_classes = config["n_classes"])
+
+    optimizer = tf.keras.optimizers.Adam(learning_rate = config["lr"])
+    model.compile(optimizer = optimizer,
+                  loss = [tf.keras.losses.CategoricalCrossentropy()],
+                  metrics = [tf.keras.metrics.CategoricalAccuracy(name = "ACC@1"),
+                             tf.keras.metrics.TopKCategoricalAccuracy(k = 10, name = "ACC@10"),
+                             tf.keras.metrics.TopKCategoricalAccuracy(k = 50, name = "ACC@50"),
+                             ])
+    savemodel = SaveModel(path = config['save_path'])
+    evaluation = Evaluation(test_G_dataset, test_Q_dataset)
+
+    if os.path.isfile("model.keras"):
+        model = tf.keras.models.load_model("model.keras", safe_mode=False, custom_objects={"Hash": Hash, "Margin": Margin})
 
 H = model.fit(train_dataset, verbose = 1,
               validation_data = valid_dataset,
               callbacks = [savemodel, evaluation],
               steps_per_epoch = 10000,
-              epochs = config["epochs"])
+              initial_epoch = 5,
+              epochs = 10)
