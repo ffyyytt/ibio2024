@@ -46,7 +46,7 @@ config = {
 
     "n_classes": 1000,
     "image_size": [224, 224, 3],
-    "hashLength": 1024,
+    "embDim": 1024,
 
     "data_paths": ['gs://kds-3f5ce2e56559d17c577c6d9f0c1acd2179da3bc0c1f87ae24d66f478', 'gs://kds-6d0cfb649153417b33f05a9913c59a358a3c03706a8fd6c5f523b8fc', 'gs://kds-0a7e8b42af254bd7711b5670f5aeb0eeda8d169841722ea59680d3d4', 'gs://kds-d27f1d2f32cff13b0ce97a6b912eb44a68e8ee3128504dcb52e23a3e', 'gs://kds-7a36360336e83a60d74c0196158fed9d6fa70cd342dc96383b7f6e2a', 'gs://kds-f99762a40174159b2d5b1caedff9d3e42758db9134c67405c68ce52d', 'gs://kds-af8ef10c715e13cb364f2655d5188aedfbb874b71e250d2773dade89', 'gs://kds-b0b80433ab5beabf70aca68659672322018f637039ae27fbd9ee9bf1'],
     "save_path": "./",
@@ -72,7 +72,8 @@ test_G_dataset = get_test_dataset(sorted(TEST_G_FILENAMES), config["batch_size"]
 test_Q_dataset = get_test_dataset(sorted(TEST_Q_FILENAMES), config["batch_size"], config["seed"], AUTO)
 
 with strategy.scope():
-    model = model_factory(backbones = config["backbones"],
+    model = model_factory(embDim = config["embDim"],
+                          backbones = config["backbones"],
                           n_classes = config["n_classes"])
 
     optimizer = tf.keras.optimizers.Adam(learning_rate = config["lr"])
