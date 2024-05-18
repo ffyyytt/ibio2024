@@ -1,4 +1,4 @@
-import tensoflow as tf
+import tensorflow as tf
 import keras_cv_attention_models
 
 class Margin(tf.keras.layers.Layer):
