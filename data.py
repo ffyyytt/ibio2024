@@ -51,7 +51,7 @@ def load_dataset(filenames, ordered, AUTO):
     return dataset
 
 def get_train_dataset(filenames, batch, seed, AUTO):
-    dataset = load_dataset(filenames, ordered = False).repeat().shuffle(seed)
+    dataset = load_dataset(filenames, ordered = False, AUTO=AUTO).repeat().shuffle(seed)
 
     dataset = dataset.map(train_transform, num_parallel_calls = AUTO)
     dataset = dataset.map(onehot, num_parallel_calls = AUTO)
@@ -62,7 +62,7 @@ def get_train_dataset(filenames, batch, seed, AUTO):
     return dataset
 
 def get_valid_dataset(filenames, batch, seed, AUTO):
-    dataset = load_dataset(filenames, ordered = True)
+    dataset = load_dataset(filenames, ordered = True, AUTO=AUTO)
 
     dataset = dataset.map(onehot, num_parallel_calls = AUTO)
     dataset = dataset.map(margin_format, num_parallel_calls = AUTO)
@@ -72,7 +72,7 @@ def get_valid_dataset(filenames, batch, seed, AUTO):
     return dataset
 
 def get_test_dataset(filenames, batch, seed, AUTO):
-    dataset = load_dataset(filenames, ordered = True)
+    dataset = load_dataset(filenames, ordered = True, AUTO=AUTO)
 
     dataset = dataset.map(margin_format, num_parallel_calls = AUTO)
 
