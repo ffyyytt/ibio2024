@@ -68,7 +68,7 @@ class Margin(tf.keras.layers.Layer):
         if training:
             logits = self.logits_distance(feature, labels)
         else:
-            logits = self.cosine(feature)
+            logits = self.scale/self.distance(feature)
         return logits
 
     def get_config(self):
