@@ -89,5 +89,5 @@ with strategy.scope():
 H = model.fit(train_dataset, verbose = 1,
               validation_data = valid_dataset,
               callbacks = [savemodel, evaluation],
-              steps_per_epoch = 50000,
+              steps_per_epoch = 2000,
               epochs = config["epochs"])
