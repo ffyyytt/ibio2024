@@ -22,7 +22,7 @@ class Evaluation(tf.keras.callbacks.Callback):
                                         outputs = [self.model.get_layer('feature').output, self.model.inputs[1]])
 
         with open(f"data_{epoch}", 'wb') as handle:
-            pickle.dump([self.process_query(model, epoch), self.process_gallery(model, epoch), self.process_vgallery(model, epoch)], handle, protocol=pickle.HIGHEST_PROTOCOL)
+            pickle.dump([self.process_query(model, epoch), self.process_gallery(model, epoch)], handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 class SaveModel(tf.keras.callbacks.Callback):
     def __init__(self, path):
